@@ -1,10 +1,13 @@
 # =============================================================================
 # models.py - Pydantic request / response schemas
 # =============================================================================
-
+# BUG-3 FIX: datetime.utcnow() is deprecated in Python 3.12+ and returns a
+#   naive datetime (no timezone info).  Replaced with
+#   datetime.now(timezone.utc) which returns timezone-aware UTC datetime.
+# =============================================================================
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal, Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -118,13 +121,13 @@ class APIKeyCreateRequest(BaseModel):
 
 class APIKeyCreateResponse(BaseModel):
     id: str
-    key: str              # shown ONCE — store it safely
+    key: str  # shown ONCE -- store it safely
     label: str
     owner_email: Optional[str]
     rate_limit_per_min: int
     monthly_token_limit: int
     created_at: datetime
-    message: str = "Save this key — it will not be shown again."
+    message: str = "Save this key -- it will not be shown again."
 
 
 # ---------------------------------------------------------------------------
@@ -134,4 +137,8 @@ class APIKeyCreateResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    # BUG-3 FIX: datetime.utcnow() is deprecated (naive datetime, no tz info).
+    # Use datetime.now(timezone.utc) for a timezone-aware UTC timestamp.
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
