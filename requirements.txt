@@ -1,0 +1,33 @@
+# ============================================================
+# requirements.txt - LocalLLM_API
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# HTTP client (async)
+httpx==0.28.1
+
+# Data validation
+pydantic==2.10.4
+pydantic-settings==2.7.0
+email-validator==2.2.0
+
+# Supabase client
+supabase==2.10.0
+
+# Date utilities
+python-dateutil==2.9.0
+
+# Environment variable loading
+python-dotenv==1.0.1
+
+# CORS, security helpers
+python-multipart==0.0.20
+
+# Optional: For running tests
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
