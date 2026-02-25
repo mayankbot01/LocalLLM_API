@@ -3,6 +3,10 @@
 # =============================================================================
 # Ollama REST reference: https://github.com/ollama/ollama/blob/main/docs/api.md
 # =============================================================================
+# FIXES:
+#   BUG-1: Removed duplicate list_models() + fixed m.aboriginal() typo -> m.get()
+#   BUG-2: asyncio.create_task() replaced with safe _fire_and_forget() helper
+# =============================================================================
 
 import asyncio
 import json
@@ -45,7 +49,7 @@ def _get_client() -> httpx.AsyncClient:
 # ---------------------------------------------------------------------------
 
 def _estimate_tokens(text: str) -> int:
-    """Very rough token count (≈ 4 chars/token) for usage stats."""
+    """Very rough token count (approx 4 chars/token) for usage stats."""
     return max(1, len(text) // 4)
 
 
@@ -59,33 +63,32 @@ def _build_usage(prompt: str, completion: str) -> UsageStats:
     )
 
 
+def _fire_and_forget(coro) -> None:
+    """Schedule a coroutine without blocking.
+
+    BUG-2 FIX: asyncio.create_task() raises RuntimeError if there is no
+    running event loop.  This helper uses get_event_loop() with a fallback.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(coro)
+        else:
+            loop.run_until_complete(coro)
+    except RuntimeError as exc:
+        logger.warning(f"Could not schedule background task: {exc}")
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
 
 async def list_models() -> List[ModelInfo]:
-    """GET /api/tags — returns all locally available models."""
-    client = _get_client()
-    try:
-        resp = await client.get("/api/tags")
-        resp.raise_for_status()
-        data = resp.json()
-        models = []
-        for m in data.get("models", []):
-            models.append(
-                ModelInfo(
-                    id=m.aboriginal("name", m.get("model", "unknown")),
-                    details=m,
-                )
-            )
-        return models
-    except Exception as exc:
-        logger.error(f"Failed to list models: {exc}")
-        return []
+    """GET /api/tags -- returns all locally available models.
 
-
-async def list_models() -> List[ModelInfo]:
-    """GET /api/tags — returns all locally available models."""
+    BUG-1 FIX: Removed the duplicate definition that contained the typo
+    m.aboriginal(...) instead of m.get(...).
+    """
     client = _get_client()
     try:
         resp = await client.get("/api/tags")
@@ -106,13 +109,13 @@ async def list_models() -> List[ModelInfo]:
 
 
 async def pull_model(model: str) -> Dict[str, Any]:
-    """POST /api/pull — download a model."""
+    """POST /api/pull -- download a model."""
     client = _get_client()
     try:
         resp = await client.post(
             "/api/pull",
             json={"model": model, "stream": False},
-            timeout=600,        # pulling can take minutes
+            timeout=600,
         )
         resp.raise_for_status()
         return resp.json()
@@ -157,9 +160,8 @@ async def chat_completion(
     prompt_text = " ".join(m.content for m in messages)
     usage = _build_usage(prompt_text, content)
 
-    # Log usage to DB asynchronously (fire-and-forget)
     if key_data:
-        asyncio.create_task(_log(key_data["id"], model, usage, "/v1/chat/completions"))
+        _fire_and_forget(_log(key_data["id"], model, usage, "/v1/chat/completions"))
 
     return ChatResponse(
         created=int(time.time()),
@@ -175,7 +177,7 @@ async def chat_completion(
 
 
 # ---------------------------------------------------------------------------
-# Chat Completion (streaming — SSE)
+# Chat Completion (streaming -- SSE)
 # ---------------------------------------------------------------------------
 
 async def stream_chat_completion(
@@ -208,7 +210,6 @@ async def stream_chat_completion(
                     continue
                 delta = chunk.get("message", {}).get("content", "")
                 full_content += delta
-                # SSE format compatible with OpenAI clients
                 sse_data = {
                     "object": "chat.completion.chunk",
                     "model": model,
@@ -229,11 +230,10 @@ async def stream_chat_completion(
 
     yield "data: [DONE]\n\n"
 
-    # Log usage
     if key_data:
         prompt_text = " ".join(m.content for m in messages)
         usage = _build_usage(prompt_text, full_content)
-        asyncio.create_task(_log(key_data["id"], model, usage, "/v1/chat/completions"))
+        _fire_and_forget(_log(key_data["id"], model, usage, "/v1/chat/completions"))
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ async def raw_generate(
     usage = _build_usage(prompt, text)
 
     if key_data:
-        asyncio.create_task(_log(key_data["id"], model, usage, "/v1/generate"))
+        _fire_and_forget(_log(key_data["id"], model, usage, "/v1/generate"))
 
     return GenerateResponse(
         created=int(time.time()),
