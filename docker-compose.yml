@@ -1,0 +1,68 @@
+# ============================================================
+# docker-compose.yml - LocalLLM_API
+#
+# Usage (on Oracle Cloud VM or local machine):
+#   docker compose up -d
+#
+# This runs:
+#   - localllm_api  : FastAPI service (port 8000)
+#   - ollama        : Ollama LLM server (port 11434)
+# ============================================================
+
+version: "3.9"
+
+services:
+
+  # ---- Ollama LLM Server ----------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # GPU support (uncomment if you have NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ---- FastAPI Gateway ------------------------------------
+  localllm_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: localllm_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override Ollama URL to use the Docker service name
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# ---- Volumes ---------------------------------------------
+volumes:
+  ollama_data:
+    driver: local
