@@ -1,6 +1,9 @@
 # ============================================================
 # requirements.txt - LocalLLM_API
 # Install: pip install -r requirements.txt
+# BUG-7 FIX: Removed duplicate httpx entry (was listed twice).
+# Added python-dateutil for database.py month-reset fallback.
+# Added pytest-cov for test coverage reporting.
 # ============================================================
 
 # Web framework
@@ -18,7 +21,7 @@ email-validator==2.2.0
 # Supabase client
 supabase==2.10.0
 
-# Date utilities
+# Date utilities (used in database.py month-reset logic)
 python-dateutil==2.9.0
 
 # Environment variable loading
@@ -27,7 +30,7 @@ python-dotenv==1.0.1
 # CORS, security helpers
 python-multipart==0.0.20
 
-# Optional: For running tests
+# Testing
 pytest==8.3.4
 pytest-asyncio==0.24.0
-httpx==0.28.1
+pytest-cov==6.0.0
